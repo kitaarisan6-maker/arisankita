@@ -1,0 +1,1534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Premium Arisan App</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.13.5/cdn.min.js" defer></script>
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; overflow-x: hidden; }
+    .glass { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+    .slide-in { animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .slide-out { animation: slideOut 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes slideOut { from { opacity: 0; transform: translateX(-30px); } to { opacity: 1; transform: translateX(0); } }
+    .modal-enter { animation: modal-in 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+    @keyframes modal-in { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    .card-hover:active { transform: scale(0.97); transition: 0.2s; }
+    .skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: loading 1.5s infinite; }
+    @keyframes loading { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    [x-cloak] { display: none !important; }
+    /* Sticky untuk filter katalog */
+    .sticky-filter {
+      position: sticky;
+      top: 64px; /* navbar height */
+      z-index: 30;
+      background-color: #f8fafc;
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
+  </style>
+</head>
+<body x-data="app()" x-init="init()">
+
+  <!-- NAVBAR -->
+  <nav class="fixed top-0 left-0 right-0 h-16 glass z-40 flex items-center px-6 justify-between border-b border-white/20">
+    <div class="flex flex-col">
+      <span class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Premium Arisan</span>
+      <span class="text-lg font-extrabold text-indigo-900 leading-tight">Arisan App</span>
+    </div>
+    <div class="bg-indigo-100 p-2 rounded-full" @click="view === 'profil' ? null : navigate('profil')">
+      <i data-lucide="user" class="w-5 h-5 text-indigo-600"></i>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <main class="pt-20 pb-32 px-4 max-w-lg mx-auto">
+    
+    <!-- KATALOG VIEW (DENGAN SEARCH & FILTER KATEGORI) -->
+    <template x-if="view === 'katalog'">
+      <div class="slide-in">
+        <!-- STICKY SEARCH & FILTER -->
+        <div class="sticky-filter space-y-3">
+          <!-- Search bar -->
+          <div class="relative group">
+            <input type="text" x-model="katalogSearchQuery" placeholder="Cari barang idaman..." 
+              class="w-full h-12 pl-12 pr-4 rounded-2xl border-none bg-white shadow-sm focus:ring-2 focus:ring-indigo-500 transition-all outline-none">
+            <i data-lucide="search" class="absolute left-4 top-3.5 w-5 h-5 text-gray-400"></i>
+          </div>
+
+          <!-- Filter kategori (chips) -->
+          <div class="flex space-x-2 overflow-x-auto pb-2 no-scrollbar">
+            <button @click="katalogCategoryFilter = ''" 
+                    class="px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all"
+                    :class="!katalogCategoryFilter ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 shadow-sm'">
+              Semua
+            </button>
+            <template x-for="cat in uniqueKatalogCategories" :key="cat">
+              <button @click="katalogCategoryFilter = cat" 
+                      class="px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all"
+                      :class="katalogCategoryFilter === cat ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 shadow-sm'"
+                      x-text="cat"></button>
+            </template>
+          </div>
+
+          <!-- Info hasil pencarian -->
+          <div x-show="filteredKatalogItems.length !== items.length" class="text-xs text-gray-500 px-1">
+            Menampilkan <span x-text="filteredKatalogItems.length"></span> dari <span x-text="items.length"></span> produk
+          </div>
+        </div>
+
+        <!-- Loading skeleton -->
+        <template x-if="loadingKatalog">
+          <div class="grid grid-cols-2 gap-4 mt-4">
+            <template x-for="i in 4">
+              <div class="bg-white rounded-3xl p-3 shadow-sm border border-gray-100">
+                <div class="w-full aspect-square skeleton rounded-2xl mb-3"></div>
+                <div class="h-4 w-3/4 skeleton rounded mb-2"></div>
+                <div class="h-3 w-1/2 skeleton rounded"></div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- Pesan jika tidak ada produk sama sekali -->
+        <template x-if="!loadingKatalog && items.length === 0">
+          <div class="flex flex-col items-center py-20 text-center">
+            <div class="bg-gray-100 p-6 rounded-full mb-4"><i data-lucide="package-open" class="w-12 h-12 text-gray-400"></i></div>
+            <h3 class="font-bold text-gray-600">Katalog Kosong</h3>
+            <p class="text-sm text-gray-400">Belum ada produk yang ditambahkan.</p>
+          </div>
+        </template>
+
+        <!-- Pesan jika hasil filter kosong -->
+        <template x-if="!loadingKatalog && items.length > 0 && filteredKatalogItems.length === 0">
+          <div class="flex flex-col items-center py-20 text-center">
+            <div class="bg-gray-100 p-6 rounded-full mb-4"><i data-lucide="search-x" class="w-12 h-12 text-gray-400"></i></div>
+            <h3 class="font-bold text-gray-600">Tidak ditemukan</h3>
+            <p class="text-sm text-gray-400">Coba kata kunci atau kategori lain.</p>
+            <button @click="katalogSearchQuery = ''; katalogCategoryFilter = ''" class="mt-4 text-indigo-600 text-sm font-bold">Reset Filter</button>
+          </div>
+        </template>
+
+        <!-- Grid produk yang sudah difilter -->
+        <div class="grid grid-cols-2 gap-4 mt-4">
+          <template x-for="item in filteredKatalogItems" :key="item.item_id">
+            <div class="bg-white rounded-3xl p-3 shadow-sm border border-gray-100 transition-all hover:shadow-xl hover:scale-[1.02] card-hover duration-300">
+              <div class="relative overflow-hidden rounded-2xl mb-3 aspect-square">
+                <img :src="item.Link_gambar" class="object-cover w-full h-full" loading="lazy">
+                <div class="absolute top-2 left-2 bg-indigo-600/90 backdrop-blur text-[10px] text-white px-2 py-1 rounded-lg font-bold" x-text="item.kategori"></div>
+              </div>
+              <h3 class="text-sm font-bold text-gray-800 mb-2 line-clamp-2 leading-tight" x-text="item.nama_barang"></h3>
+              
+              <div class="space-y-2">
+                <div class="bg-emerald-50 p-2 rounded-xl border border-emerald-100">
+                  <p class="text-[9px] text-emerald-600 font-bold uppercase tracking-wider">5 Bulan</p>
+                  <p class="text-xs font-extrabold text-emerald-700" x-text="formatIDR(item.Cicilan_5bulan)"></p>
+                </div>
+                <div class="bg-blue-50 p-2 rounded-xl border border-blue-100">
+                  <p class="text-[9px] text-blue-600 font-bold uppercase tracking-wider">10 Bulan</p>
+                  <p class="text-xs font-extrabold text-blue-700" x-text="formatIDR(item.Cicilan_10bulan)"></p>
+                </div>
+              </div>
+              <div class="mt-3 pt-2 border-t border-dashed border-gray-100 flex justify-between items-center text-indigo-600">
+                <span class="text-[10px] font-bold">Bonus:</span>
+                <span class="text-xs font-black" x-text="formatIDR(item.bonus_arisan)"></span>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
+
+    <!-- ADMIN VIEW -->
+    <template x-if="view === 'admin'">
+      <div class="slide-in space-y-6">
+        <div class="flex flex-col">
+          <h2 class="text-2xl font-extrabold text-gray-800">Admin Panel</h2>
+          <p class="text-sm text-gray-500">Kelola operasional aplikasi Anda</p>
+        </div>
+
+        <div class="grid grid-cols-1 gap-4">
+          <button @click="navigate('tambahProduk')" class="bg-white p-5 rounded-[28px] shadow-sm border border-gray-100 flex items-center space-x-4 card-hover text-left transition-all hover:shadow-indigo-100 hover:shadow-lg group">
+            <div class="bg-indigo-600 p-3 rounded-2xl text-white group-hover:rotate-12 transition-transform">
+              <i data-lucide="plus-circle" class="w-6 h-6"></i>
+            </div>
+            <div class="flex-1">
+              <h4 class="font-bold text-gray-800">Tambah Produk</h4>
+              <p class="text-xs text-gray-400 leading-tight">Input data produk baru ke katalog</p>
+            </div>
+            <i data-lucide="chevron-right" class="w-5 h-5 text-gray-300"></i>
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <!-- TAMBAH PRODUK VIEW -->
+    <template x-if="view === 'tambahProduk'">
+      <div class="slide-in space-y-6">
+        <div class="flex items-center space-x-4">
+          <button @click="navigate('admin')" class="p-2 bg-white rounded-xl shadow-sm text-gray-600 active:scale-90 transition-transform">
+            <i data-lucide="arrow-left" class="w-6 h-6"></i>
+          </button>
+          <h2 class="text-xl font-extrabold text-gray-800 leading-tight">Tambah Produk Baru</h2>
+        </div>
+
+        <div class="bg-white rounded-[32px] p-6 shadow-xl border border-gray-100 shadow-indigo-100/50">
+          <form @submit.prevent="submitForm" class="space-y-5">
+            <div class="space-y-1">
+              <label class="text-xs font-bold text-gray-500 ml-1 uppercase tracking-wider">Nama Barang</label>
+              <input x-model="form.nama_barang" required type="text" placeholder="Contoh: Honda Vario 160" class="w-full bg-gray-50 border-none rounded-2xl h-12 px-4 focus:ring-2 focus:ring-indigo-500 transition-all outline-none">
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div class="space-y-1">
+                <label class="text-xs font-bold text-gray-500 ml-1 uppercase tracking-wider">Kategori</label>
+                <select x-model="form.kategori" class="w-full bg-gray-50 border-none rounded-2xl h-12 px-4 focus:ring-2 focus:ring-indigo-500 outline-none">
+                  <option>Elektronik</option>
+                  <option>Perabotan</option>
+                  <option>Emas</option>
+                  <option>Lainnya</option>
+                </select>
+              </div>
+              <div class="space-y-1">
+                <label class="text-xs font-bold text-gray-500 ml-1 uppercase tracking-wider">Modal (IDR)</label>
+                <input x-model="form.harga_modal" required type="number" placeholder="0" class="w-full bg-gray-50 border-none rounded-2xl h-12 px-4 outline-none">
+              </div>
+            </div>
+
+            <div class="space-y-1">
+              <label class="text-xs font-bold text-gray-500 ml-1 uppercase tracking-wider">Link Gambar</label>
+              <input x-model="form.Link_gambar" required type="url" placeholder="https://..." class="w-full bg-gray-50 border-none rounded-2xl h-12 px-4 outline-none">
+            </div>
+
+            <div class="bg-indigo-50/50 p-5 rounded-[24px] border border-indigo-100 space-y-4">
+              <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-1">
+                  <label class="text-[10px] font-black text-indigo-400 uppercase">Cicilan 5 Bln</label>
+                  <input x-model="form.Cicilan_5bulan" type="number" class="w-full bg-white border-none rounded-xl h-10 px-3 shadow-sm outline-none">
+                </div>
+                <div class="space-y-1">
+                  <label class="text-[10px] font-black text-indigo-400 uppercase">Cicilan 10 Bln</label>
+                  <input x-model="form.Cicilan_10bulan" type="number" class="w-full bg-white border-none rounded-xl h-10 px-3 shadow-sm outline-none">
+                </div>
+              </div>
+              <div class="space-y-1">
+                <label class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Bonus Arisan (IDR)</label>
+                <input x-model="form.bonus_arisan" type="number" class="w-full bg-white border-none rounded-xl h-10 px-3 shadow-sm outline-none">
+              </div>
+            </div>
+
+            <button type="submit" :disabled="submitting" 
+              class="w-full bg-gradient-to-r from-indigo-600 to-indigo-800 h-14 rounded-2xl text-white font-bold shadow-lg shadow-indigo-100 active:scale-95 transition-all flex items-center justify-center space-x-2">
+              <template x-if="submitting">
+                <div class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              </template>
+              <span x-text="submitting ? 'Sedang Menyimpan...' : 'Simpan Produk'"></span>
+            </button>
+          </form>
+        </div>
+      </div>
+    </template>
+
+    <!-- GRUP VIEW -->
+    <template x-if="view === 'grup'">
+      <div class="slide-in space-y-6">
+        <div class="flex flex-col">
+          <h2 class="text-2xl font-extrabold text-gray-800">Grup Arisan Saya</h2>
+          <p class="text-sm text-gray-500">Daftar kelompok yang Anda kelola</p>
+        </div>
+        <template x-if="loadingGroups">
+          <div class="space-y-3">
+            <div class="h-24 skeleton rounded-2xl"></div>
+            <div class="h-24 skeleton rounded-2xl"></div>
+          </div>
+        </template>
+        <template x-if="!loadingGroups && (!groups || groups.length === 0)">
+          <div class="bg-white p-8 rounded-3xl text-center border border-gray-100">
+            <i data-lucide="users" class="w-12 h-12 text-gray-300 mx-auto mb-4"></i>
+            <p class="font-bold text-gray-500">Belum ada grup</p>
+            <p class="text-sm text-gray-400">Buat grup pertama Anda dari katalog</p>
+            <button @click="navigate('katalog')" class="mt-4 bg-indigo-100 text-indigo-700 px-6 py-3 rounded-xl font-bold text-sm">Jelajahi Katalog</button>
+          </div>
+        </template>
+        <div class="space-y-3">
+          <template x-for="g in groups" :key="g.group_id">
+            <div @click="goToDetailGroup(g.group_id)" class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 card-hover flex items-center justify-between">
+              <div>
+                <h4 class="font-bold text-gray-800" x-text="g.nama_grup"></h4>
+                <div class="flex items-center space-x-2 mt-1">
+                  <span class="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full font-bold" x-text="(Number(g.jumlah_anggota) || 0) + ' anggota'"></span>
+                  <span class="text-xs text-gray-400" x-text="'Mulai: ' + g.tgl_mulai"></span>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">
+                  <span class="font-medium">Total setoran/bln:</span> 
+                  <span class="text-indigo-600 font-bold" x-text="formatIDR(g.total_setoran || 0)"></span>
+                </p>
+                <span class="inline-block mt-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full" x-text="g.status"></span>
+              </div>
+              <i data-lucide="chevron-right" class="w-5 h-5 text-gray-300"></i>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
+
+    <!-- DETAIL GRUP VIEW -->
+    <template x-if="view === 'detailGrup'">
+      <div class="slide-in space-y-6">
+        <div class="flex items-center space-x-4">
+          <button @click="navigate('grup')" class="p-2 bg-white rounded-xl shadow-sm text-gray-600">
+            <i data-lucide="arrow-left" class="w-6 h-6"></i>
+          </button>
+          <h2 class="text-xl font-extrabold text-gray-800" x-text="detailGroup.nama_grup"></h2>
+        </div>
+        <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+          <div class="flex justify-between items-center">
+            <div>
+              <p class="text-xs text-gray-400">Jumlah Anggota</p>
+              <p class="text-2xl font-black text-indigo-600" x-text="Number(detailGroup.jumlah_anggota) || 0"></p>
+            </div>
+            <div class="text-right">
+              <p class="text-xs text-gray-400">Tanggal Mulai</p>
+              <p class="font-bold" x-text="detailGroup.tgl_mulai"></p>
+              <p class="text-xs text-gray-400 mt-2">Kocok Berikutnya</p>
+              <p class="font-bold text-amber-600" x-text="nextKocokDate"></p>
+            </div>
+          </div>
+        </div>
+        <!-- Tombol Kocok -->
+        <div class="mt-4">
+          <button @click="startShuffle()" 
+                  :disabled="!canShuffle || shuffling"
+                  class="w-full bg-gradient-to-r from-amber-500 to-orange-600 text-white py-4 rounded-xl font-bold shadow-lg shadow-amber-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">
+            <template x-if="!shuffling">
+              <span class="flex items-center gap-2">
+                <i data-lucide="dices" class="w-5 h-5"></i>
+                <span x-text="canShuffle ? '🎲 Mulai Kocok' : '⏳ Belum Waktu Kocok'"></span>
+              </span>
+            </template>
+            <template x-if="shuffling">
+              <span class="flex items-center gap-2">
+                <span class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                <span>Mengocok...</span>
+              </span>
+            </template>
+          </button>
+        </div>
+        <div>
+          <h3 class="font-bold text-gray-700 mb-3">Daftar Anggota</h3>
+          <div class="space-y-2">
+            <template x-for="(m, i) in detailMembers" :key="m.member_id">
+              <div class="bg-white p-4 rounded-xl border border-gray-100 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                  <div class="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold text-sm" x-text="i+1"></div>
+                  <img :src="m.Link_gambar" class="w-10 h-10 rounded-lg object-cover border border-gray-200" v-if="m.Link_gambar">
+                  <div>
+                    <p class="font-bold text-gray-800" x-text="m.nama_anggota"></p>
+                    <p class="text-xs text-gray-400" x-text="m.nama_produk"></p>
+                    <p class="text-[10px] text-indigo-600 font-medium mt-0.5" x-text="'Cicilan: ' + formatIDR(m.cicilan_per_bulan) + '/bln'"></p>
+                  </div>
+                </div>
+                <span class="text-xs font-bold px-2 py-1 rounded-full" :class="m.status_menang === 'Sudah' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'" x-text="m.status_menang"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- PROFIL VIEW -->
+    <template x-if="view === 'profil'">
+      <div class="slide-in max-w-md mx-auto space-y-6">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-3xl font-black text-gray-900 tracking-tight">Profil</h2>
+          <template x-if="currentUser && !isEditMode">
+            <button @click="logout()" class="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors">
+              <i data-lucide="log-out" class="w-6 h-6"></i>
+            </button>
+          </template>
+        </div>
+
+        <template x-if="loadingProfile">
+          <div class="bg-white rounded-[2rem] p-8 shadow-xl shadow-gray-100/50 border border-gray-50">
+            <div class="flex flex-col items-center text-center space-y-4">
+              <div class="w-24 h-24 rounded-full skeleton"></div>
+              <div class="h-6 w-48 skeleton rounded-lg"></div>
+              <div class="h-4 w-32 skeleton rounded-md"></div>
+            </div>
+            <div class="mt-10 space-y-4">
+              <div class="h-12 w-full skeleton rounded-2xl"></div>
+              <div class="h-12 w-full skeleton rounded-2xl"></div>
+            </div>
+          </div>
+        </template>
+
+        <template x-if="!loadingProfile && !currentUser">
+          <div class="bg-white p-10 rounded-[2rem] text-center shadow-xl shadow-indigo-100/20 border border-gray-50">
+            <div class="w-20 h-20 bg-indigo-50 text-indigo-500 rounded-3xl flex items-center justify-center mx-auto mb-6 transform -rotate-6">
+              <i data-lucide="user-plus" class="w-10 h-10"></i>
+            </div>
+            <h3 class="text-xl font-bold text-gray-800">Mari Bergabung</h3>
+            <p class="text-gray-500 mt-2 mb-8">Akses semua fitur dengan masuk ke akun Anda.</p>
+            <button @click="openLoginModal()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-bold shadow-lg shadow-indigo-200 active:scale-[0.98] transition-all">
+              Login / Daftar Sekarang
+            </button>
+          </div>
+        </template>
+
+        <template x-if="!loadingProfile && currentUser">
+          <div class="bg-white rounded-[2.5rem] p-8 shadow-xl shadow-gray-200/40 border border-gray-50 overflow-hidden relative">
+            
+            <div class="flex flex-col items-center text-center mb-8">
+              <div class="relative group">
+                <img :src="currentUser.photo || 'https://ui-avatars.com/api/?name=' + (currentUser.nama_ketua || 'User') + '&background=6366f1&color=fff&bold=true'" 
+                    class="w-28 h-28 rounded-[2rem] object-cover ring-4 ring-indigo-50 shadow-md">
+                <div x-show="isEditMode" class="absolute inset-0 bg-black/40 rounded-[2rem] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <i data-lucide="camera" class="text-white w-6 h-6"></i>
+                </div>
+              </div>
+              <h3 class="text-2xl font-black text-gray-800 mt-4" x-text="currentUser.nama_ketua"></h3>
+              <span class="inline-flex items-center px-3 py-1 mt-2 rounded-full bg-indigo-50 text-indigo-600 text-xs font-bold uppercase tracking-wider" x-text="currentUser.role_akses || 'Anggota'"></span>
+            </div>
+
+            <template x-if="!isEditMode">
+              <div class="space-y-4">
+                <div class="bg-gray-50/50 p-4 rounded-2xl flex items-start gap-4">
+                  <div class="p-2 bg-white rounded-xl shadow-sm text-indigo-500">
+                      <i data-lucide="phone" class="w-5 h-5"></i>
+                  </div>
+                  <div>
+                      <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">WhatsApp</p>
+                      <p class="text-gray-700 font-semibold" x-text="currentUser.nomor_wa"></p>
+                  </div>
+                </div>
+
+                <div class="bg-gray-50/50 p-4 rounded-2xl flex items-start gap-4">
+                  <div class="p-2 bg-white rounded-xl shadow-sm text-indigo-500">
+                      <i data-lucide="map-pin" class="w-5 h-5"></i>
+                  </div>
+                  <div>
+                    <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Lokasi</p>
+                    <p class="text-gray-700 font-medium leading-relaxed" 
+                      x-text="(currentUser.alamat || currentUser['Alamat lengkap'] || '-') + ', ' + 
+                              (currentUser.kelurahan || currentUser['Kelurahan'] || '-') + ', ' + 
+                              (currentUser.kecamatan || currentUser['Kecamatan'] || '-')">
+                    </p>
+                  </div>
+                </div>
+
+                <button @click="startEditProfile()" class="w-full mt-6 bg-gray-900 hover:bg-black text-white py-4 rounded-2xl font-bold shadow-lg shadow-gray-200 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                  <i data-lucide="edit-3" class="w-4 h-4"></i>
+                  Edit Profil
+                </button>
+              </div>
+            </template>
+
+            <template x-if="isEditMode">
+              <form @submit.prevent="saveProfile()" class="space-y-5">
+                <div class="grid gap-4">
+                  <div>
+                    <label class="text-xs font-bold text-gray-400 ml-1 uppercase">Nama Lengkap</label>
+                    <input x-model="editForm.nama_ketua" type="text" required class="w-full bg-gray-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl h-14 px-5 transition-all outline-none font-medium">
+                  </div>
+                  
+                  <div>
+                    <label class="text-xs font-bold text-gray-400 ml-1 uppercase">WhatsApp</label>
+                    <input x-model="editForm.nomor_wa" type="tel" class="w-full bg-gray-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl h-14 px-5 transition-all outline-none font-medium">
+                  </div>
+
+                  <div>
+                    <label class="text-xs font-bold text-gray-400 ml-1 uppercase">Alamat</label>
+                    <textarea x-model="editForm.alamat" rows="2" class="w-full bg-gray-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl p-5 transition-all outline-none font-medium"></textarea>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <label class="text-xs font-bold text-gray-400 ml-1 uppercase">Kecamatan</label>
+                      <select x-model="editForm.kecamatan" @change="updateEditKelurahan()" class="w-full bg-gray-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl h-14 px-4 transition-all outline-none font-medium appearance-none">
+                        <option value="">Pilih...</option>
+                        <template x-for="kec in kecamatanList" :key="kec">
+                          <option :value="kec" x-text="kec"></option>
+                        </template>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="text-xs font-bold text-gray-400 ml-1 uppercase">Kelurahan</label>
+                      <select x-model="editForm.kelurahan" class="w-full bg-gray-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl h-14 px-4 transition-all outline-none font-medium appearance-none">
+                        <option value="">Pilih...</option>
+                        <template x-for="kel in editAvailableKelurahan" :key="kel">
+                          <option :value="kel" x-text="kel"></option>
+                        </template>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex gap-3 pt-4">
+                  <button type="button" @click="cancelEdit()" class="flex-1 bg-gray-100 text-gray-600 py-4 rounded-2xl font-bold hover:bg-gray-200 transition-colors">
+                    Batal
+                  </button>
+                  <button type="submit" :disabled="savingProfile" class="flex-[2] bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-indigo-200 active:scale-[0.98] transition-all disabled:opacity-50">
+                    <span x-show="!savingProfile">Simpan Perubahan</span>
+                    <span x-show="savingProfile" class="flex items-center justify-center gap-2">
+                      <div class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      Proses...
+                    </span>
+                  </button>
+                </div>
+              </form>
+            </template>
+
+          </div>
+        </template>
+      </div>
+    </template>
+
+    <!-- CREATE GROUP VIEW (HALAMAN PENUH) -->
+    <template x-if="view === 'createGroup'">
+      <div class="slide-in space-y-6">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <button @click="cancelCreateGroup()" class="p-2 bg-white rounded-xl shadow-sm text-gray-600">
+              <i data-lucide="arrow-left" class="w-6 h-6"></i>
+            </button>
+            <h2 class="text-xl font-extrabold text-gray-800">Buat Kelompok</h2>
+          </div>
+          <button @click="cancelCreateGroup()" class="p-2 bg-white rounded-xl shadow-sm text-gray-600">
+            <i data-lucide="x" class="w-6 h-6"></i>
+          </button>
+        </div>
+
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center space-x-2" :class="wizardStep >= 1 ? 'text-indigo-600' : 'text-gray-300'">
+            <span class="w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold" :class="wizardStep >= 1 ? 'border-indigo-600 bg-indigo-100' : 'border-gray-300'">1</span>
+            <span class="text-xs font-bold">Setting</span>
+          </div>
+          <div class="h-0.5 w-8 bg-gray-200"></div>
+          <div class="flex items-center space-x-2" :class="wizardStep >= 2 ? 'text-indigo-600' : 'text-gray-300'">
+            <span class="w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold" :class="wizardStep >= 2 ? 'border-indigo-600 bg-indigo-100' : 'border-gray-300'">2</span>
+            <span class="text-xs font-bold">Anggota</span>
+          </div>
+          <div class="h-0.5 w-8 bg-gray-200"></div>
+          <div class="flex items-center space-x-2" :class="wizardStep >= 3 ? 'text-indigo-600' : 'text-gray-300'">
+            <span class="w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold" :class="wizardStep >= 3 ? 'border-indigo-600 bg-indigo-100' : 'border-gray-300'">3</span>
+            <span class="text-xs font-bold">Selesai</span>
+          </div>
+        </div>
+
+        <div x-show="draftAvailable" class="bg-yellow-50 border border-yellow-200 rounded-xl p-3 flex items-center justify-between">
+          <span class="text-sm text-yellow-800">Anda memiliki draft yang belum selesai.</span>
+          <div class="flex space-x-2">
+            <button @click="loadDraft()" class="text-xs bg-yellow-200 text-yellow-800 px-3 py-1 rounded-full font-bold">Lanjutkan</button>
+            <button @click="discardDraft()" class="text-xs bg-gray-200 text-gray-600 px-3 py-1 rounded-full font-bold">Buang</button>
+          </div>
+        </div>
+
+        <div x-show="wizardStep === 1">
+          <h4 class="font-bold text-gray-800 mb-4">Pengaturan Kelompok</h4>
+          <div class="space-y-4">
+            <div>
+              <label class="text-xs font-bold text-gray-500">Jumlah Anggota</label>
+              <div class="flex space-x-3 mt-2">
+                <button type="button" @click="groupData.jumlah_anggota = 5" class="flex-1 py-3 rounded-xl font-bold transition-all" :class="groupData.jumlah_anggota === 5 ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'">5 Anggota</button>
+                <button type="button" @click="groupData.jumlah_anggota = 10" class="flex-1 py-3 rounded-xl font-bold transition-all" :class="groupData.jumlah_anggota === 10 ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'">10 Anggota</button>
+              </div>
+            </div>
+            <div>
+              <label class="text-xs font-bold text-gray-500">Tanggal Mulai (minimal H+7)</label>
+              <input type="date" x-model="groupData.tgl_mulai" :min="minDate" class="w-full bg-gray-50 border-none rounded-xl h-12 px-4 mt-1 outline-none" required>
+            </div>
+            <div class="pt-4">
+              <button @click="nextStep" class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">Lanjut</button>
+            </div>
+          </div>
+        </div>
+
+        <div x-show="wizardStep === 2">
+          <h4 class="font-bold text-gray-800 mb-4">Data Anggota & Produk</h4>
+          <div class="space-y-6 max-h-96 overflow-y-auto no-scrollbar pr-1">
+            <template x-for="(m, idx) in members" :key="idx">
+              <div class="border border-gray-200 rounded-2xl p-4">
+                <div class="flex justify-between items-center mb-2">
+                  <span class="font-bold text-sm text-indigo-600" x-text="'Anggota '+(idx+1)"></span>
+                </div>
+                <input x-model="m.nama_anggota" placeholder="Nama Lengkap" class="w-full bg-gray-50 border-none rounded-xl h-10 px-3 text-sm mb-2 outline-none" required>
+                
+                <div class="relative">
+                  <input x-model="m.nomor_hp" type="tel" placeholder="Nomor HP" class="w-full bg-gray-50 border-none rounded-xl h-10 px-3 text-sm mb-2 outline-none pr-16" required>
+                  <button type="button" 
+                          x-show="supportsContactPicker" 
+                          @click="pickContactForMember(idx)"
+                          class="absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full font-bold">
+                    📞 Pilih
+                  </button>
+                </div>
+                
+                <div class="flex items-center justify-between mt-2">
+                  <span x-show="!m.produk" class="text-xs text-gray-400">Belum pilih produk</span>
+                  <span x-show="m.produk" class="text-xs font-medium text-emerald-600 flex items-center gap-1">
+                    <img :src="m.produk.Link_gambar" class="w-6 h-6 rounded object-cover" v-if="m.produk.Link_gambar">
+                    <span x-text="m.produk.nama_barang"></span>
+                  </span>
+                  <button type="button" @click="openProductPicker(idx)" class="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-xl text-xs font-bold">Pilih Produk</button>
+                </div>
+              </div>
+            </template>
+          </div>
+          <div class="pt-4 flex space-x-3">
+            <button @click="wizardStep = 1" class="flex-1 bg-gray-200 text-gray-700 py-3 rounded-xl font-bold">Kembali</button>
+            <button @click="validateAndNext" class="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold">Lanjut</button>
+          </div>
+        </div>
+
+        <div x-show="wizardStep === 3">
+          <div class="text-center py-6">
+            <i data-lucide="check-circle" class="w-16 h-16 text-emerald-500 mx-auto mb-4"></i>
+            <h4 class="font-bold text-xl mb-2">Siap Dibuat!</h4>
+            <p class="text-gray-500 text-sm mb-6">Nama grup: <span class="font-mono font-bold" x-text="groupData.nama_grup"></span></p>
+            <button @click="submitCreateGroup" :disabled="creatingGroup" class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold flex items-center justify-center">
+              <template x-if="creatingGroup"><span class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></span></template>
+              <span>Buat Kelompok Sekarang</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- PRODUCT PICKER VIEW (HALAMAN PENUH) -->
+    <template x-if="view === 'productPicker'">
+      <div class="slide-in space-y-6">
+        <div class="flex items-center space-x-3">
+          <button @click="view = 'createGroup'" class="p-2 bg-white rounded-xl shadow-sm text-gray-600">
+            <i data-lucide="arrow-left" class="w-6 h-6"></i>
+          </button>
+          <h2 class="text-xl font-extrabold text-gray-800">Pilih Produk</h2>
+        </div>
+
+        <div class="relative">
+          <input type="text" x-model="productSearchQuery" placeholder="Cari produk atau kategori..." 
+                 class="w-full h-12 pl-12 pr-4 rounded-2xl border-none bg-white shadow-sm focus:ring-2 focus:ring-indigo-500 transition-all outline-none">
+          <i data-lucide="search" class="absolute left-4 top-3.5 w-5 h-5 text-gray-400"></i>
+        </div>
+
+        <div class="flex space-x-2 overflow-x-auto pb-2 no-scrollbar">
+          <button @click="selectedCategoryFilter = ''" 
+                  class="px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all"
+                  :class="!selectedCategoryFilter ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'">
+            Semua
+          </button>
+          <template x-for="cat in uniqueCategories" :key="cat">
+            <button @click="selectedCategoryFilter = cat" 
+                    class="px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all"
+                    :class="selectedCategoryFilter === cat ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'"
+                    x-text="cat"></button>
+          </template>
+        </div>
+
+        <div class="flex items-center justify-between">
+          <p class="text-xs text-gray-500" x-text="filteredProducts.length + ' produk ditemukan'"></p>
+          <div class="flex items-center space-x-1">
+            <button @click="currentPage = Math.max(1, currentPage - 1)" :disabled="currentPage === 1"
+                    class="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 disabled:opacity-50">
+              <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            </button>
+            <span class="text-xs font-medium px-2" x-text="currentPage + ' / ' + totalPages"></span>
+            <button @click="currentPage = Math.min(totalPages, currentPage + 1)" :disabled="currentPage === totalPages"
+                    class="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 disabled:opacity-50">
+              <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <template x-for="item in paginatedProducts" :key="item.item_id">
+            <div @click="selectProductForMember(item)" class="bg-white rounded-2xl p-3 shadow-sm border border-gray-100 card-hover flex flex-col">
+              <img :src="item.Link_gambar" class="w-full aspect-square object-cover rounded-xl mb-2">
+              <p class="text-sm font-bold line-clamp-2" x-text="item.nama_barang"></p>
+              <div class="flex items-center justify-between mt-1">
+                <p class="text-xs text-indigo-600 font-bold" x-text="formatIDR(groupData.jumlah_anggota === 5 ? item.Cicilan_5bulan : item.Cicilan_10bulan)"></p>
+                <span class="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                  <span x-text="groupData.jumlah_anggota === 5 ? '5 bln' : '10 bln'"></span>
+                </span>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <div x-show="filteredProducts.length === 0" class="text-center py-10">
+          <i data-lucide="package-search" class="w-12 h-12 text-gray-300 mx-auto mb-4"></i>
+          <p class="text-gray-500 font-medium">Produk tidak ditemukan</p>
+          <p class="text-xs text-gray-400">Coba kata kunci lain atau pilih kategori berbeda</p>
+        </div>
+      </div>
+    </template>
+  </main>
+
+  <!-- FLOATING BUTTON BUAT KELOMPOK (KATALOG) -->
+  <template x-if="view === 'katalog'">
+    <button @click="startCreateGroupFlow()" class="fixed bottom-24 right-6 bg-gradient-to-br from-indigo-600 to-indigo-800 text-white px-6 py-4 rounded-full shadow-2xl flex items-center space-x-3 z-30 transition-all active:scale-90 ring-4 ring-white slide-in">
+      <i data-lucide="plus-circle" class="w-6 h-6"></i>
+      <span class="font-bold">Buat Kelompok</span>
+    </button>
+  </template>
+
+  <!-- MODAL: LOGIN/REGISTER (SEDERHANA) -->
+  <div x-show="showLoginModal" x-cloak x-transition.opacity class="fixed inset-0 z-[70] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm" @click.self="showLoginModal = false">
+    <div class="bg-white w-full max-w-sm rounded-[40px] p-6 modal-enter">
+      <h3 class="text-xl font-extrabold mb-4">Masuk/Daftar</h3>
+      <form @submit.prevent="checkUserAndProceed">
+        <input x-model="loginForm.nomor_wa" type="tel" placeholder="Nomor WhatsApp" class="w-full bg-gray-50 border-none rounded-2xl h-12 px-4 mb-4 outline-none focus:ring-2 focus:ring-indigo-500" required>
+        <button type="submit" :disabled="loggingIn" class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold flex items-center justify-center">
+          <template x-if="!loggingIn"><span>Lanjutkan</span></template>
+          <template x-if="loggingIn">
+            <span class="flex items-center"><span class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></span>Memeriksa...</span>
+          </template>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: REGISTER (DENGAN UPLOAD FOTO) -->
+  <div x-show="showRegisterModal" 
+       x-cloak 
+       x-transition:enter="transition ease-out duration-300"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-200"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95"
+       class="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md overflow-y-auto">
+    
+    <div @click.away="showRegisterModal = false" class="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden my-8">
+        <div class="px-8 pt-8 pb-4 text-center">
+            <h3 class="text-2xl font-black text-gray-800 tracking-tight">Daftar Akun</h3>
+            <p class="text-sm text-gray-500 mt-1">Lengkapi data diri untuk bergabung</p>
+        </div>
+
+        <form @submit.prevent="submitRegister" class="px-8 pb-8">
+            <div class="space-y-4">
+                
+                <div class="flex flex-col items-center justify-center mb-4">
+                    <div class="relative group">
+                        <template x-if="registerForm.photoPreview">
+                            <img :src="registerForm.photoPreview" class="w-24 h-24 rounded-3xl object-cover border-4 border-indigo-50 shadow-lg">
+                        </template>
+                        <template x-if="!registerForm.photoPreview">
+                            <div class="w-24 h-24 rounded-3xl bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300">
+                                <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                            </div>
+                        </template>
+                        
+                        <label for="photo-upload" class="absolute -bottom-2 -right-2 bg-indigo-600 text-white p-2 rounded-xl shadow-lg cursor-pointer hover:bg-indigo-700 transition">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        </label>
+                        <input id="photo-upload" type="file" accept="image/*" class="hidden" 
+                               @change="const file = $event.target.files[0]; 
+                                        if (file) { 
+                                            registerForm.photoFile = file; 
+                                            const reader = new FileReader();
+                                            reader.onload = (e) => { registerForm.photoPreview = e.target.result };
+                                            reader.readAsDataURL(file);
+                                        } else {
+                                            registerForm.photoFile = null;
+                                            registerForm.photoPreview = '';
+                                        }">
+                    </div>
+                    <span class="text-[10px] text-gray-400 mt-2 uppercase tracking-widest font-bold">Upload Foto</span>
+                </div>
+
+                <div class="relative">
+                    <input x-model="registerForm.nama_ketua" type="text" placeholder="Nama Lengkap" class="peer w-full bg-gray-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl h-14 px-5 outline-none transition-all" required>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <input x-model="registerForm.nomor_wa" type="tel" placeholder="Nomor WA" class="w-full bg-gray-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl h-14 px-5 outline-none transition-all" required>
+                    <input x-model="registerForm.pin" type="password" placeholder="PIN 6 Digit" maxlength="6" class="w-full bg-gray-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl h-14 px-5 outline-none transition-all" required>
+                </div>
+
+                <textarea x-model="registerForm.alamat" placeholder="Alamat Lengkap" class="w-full bg-gray-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl p-4 h-24 outline-none transition-all resize-none" required></textarea>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="relative">
+                        <select x-model="registerForm.kecamatan" @change="updateKelurahan()" class="appearance-none w-full bg-gray-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl h-14 px-5 outline-none transition-all" required>
+                            <option value="">Kecamatan</option>
+                            <template x-for="kec in kecamatanList" :key="kec">
+                                <option :value="kec" x-text="kec"></option>
+                            </template>
+                        </select>
+                    </div>
+                    
+                    <div class="relative">
+                        <select x-model="registerForm.kelurahan" class="appearance-none w-full bg-gray-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl h-14 px-5 outline-none transition-all" required>
+                            <option value="">Kelurahan</option>
+                            <template x-for="kel in availableKelurahan" :key="kel">
+                                <option :value="kel" x-text="kel"></option>
+                            </template>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" :disabled="registering" 
+                    class="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white py-4 rounded-2xl font-extrabold mt-8 flex items-center justify-center shadow-lg shadow-indigo-200 transition-all active:scale-[0.98]">
+                <template x-if="!registering">
+                    <span>Buat Akun Sekarang</span>
+                </template>
+                <template x-if="registering">
+                    <span class="flex items-center">
+                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Memproses...
+                    </span>
+                </template>
+            </button>
+        </form>
+    </div>
+  </div>
+
+  <!-- MODAL: ANIMASI PENGOCokan -->
+  <div x-show="showShuffleModal" x-cloak x-transition.opacity class="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
+    <div class="bg-white w-full max-w-sm rounded-[40px] p-8 modal-enter text-center">
+      <template x-if="!shuffleWinner">
+        <div>
+          <div class="flex justify-center mb-4">
+            <div class="relative w-24 h-24">
+              <div class="absolute inset-0 border-8 border-amber-200 rounded-full animate-ping"></div>
+              <div class="relative w-24 h-24 bg-amber-100 rounded-full flex items-center justify-center">
+                <i data-lucide="dices" class="w-12 h-12 text-amber-600 animate-bounce"></i>
+              </div>
+            </div>
+          </div>
+          <h3 class="text-xl font-extrabold mb-2">Mengocok...</h3>
+          <p class="text-gray-500 mb-4">Siapa yang beruntung?</p>
+          <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div class="h-full bg-amber-500 animate-pulse" style="width: 100%"></div>
+          </div>
+        </div>
+      </template>
+      <template x-if="shuffleWinner">
+        <div>
+          <div class="flex justify-center mb-4">
+            <div class="bg-emerald-100 p-6 rounded-full">
+              <i data-lucide="crown" class="w-16 h-16 text-emerald-600"></i>
+            </div>
+          </div>
+          <h3 class="text-2xl font-extrabold text-emerald-700 mb-2">🎉 Selamat! 🎉</h3>
+          <p class="text-gray-500 mb-2">Pemenang Bulan Ini</p>
+          <div class="bg-gray-50 rounded-2xl p-4 mb-6">
+            <p class="text-3xl font-black text-gray-800" x-text="shuffleWinner.nama_anggota"></p>
+            <p class="text-sm text-gray-500 mt-1" x-text="shuffleWinner.nama_produk"></p>
+            <p class="text-xs text-indigo-600 mt-2">Mendapatkan giliran ke-<span x-text="shuffleWinner.urutan_menang"></span></p>
+          </div>
+          <button @click="closeShuffleModal()" class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">Tutup</button>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div x-show="toast.show" x-cloak x-transition class="fixed bottom-28 left-6 right-6 z-[100] flex justify-center">
+    <div :class="toast.success ? 'bg-emerald-600' : 'bg-red-600'" class="px-6 py-3 rounded-2xl text-white text-sm font-bold shadow-xl flex items-center space-x-2">
+      <i :data-lucide="toast.success ? 'check-circle' : 'alert-circle'" class="w-4 h-4"></i>
+      <span x-text="toast.message"></span>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAV (disembunyikan di createGroup, detailGrup, dan productPicker) -->
+  <div x-show="!['createGroup', 'detailGrup', 'productPicker'].includes(view)" class="fixed bottom-0 left-0 right-0 h-20 glass border-t border-gray-100 z-50 flex items-center justify-around px-10 rounded-t-[32px]">
+    <button @click="navigate('katalog')" class="flex flex-col items-center space-y-1 transition-all" :class="view === 'katalog' ? 'text-indigo-600 scale-110' : 'text-gray-400'">
+      <i data-lucide="layout-grid" class="w-6 h-6"></i>
+      <span class="text-[10px] font-extrabold uppercase">Katalog</span>
+    </button>
+    <button @click="navigate('grup')" class="flex flex-col items-center space-y-1 transition-all" :class="view === 'grup' ? 'text-indigo-600 scale-110' : 'text-gray-400'">
+      <i data-lucide="users" class="w-6 h-6"></i>
+      <span class="text-[10px] font-extrabold uppercase">Grup</span>
+    </button>
+    <button x-show="currentUser && currentUser.role_akses === 'Admin'" @click="navigate('admin')" class="flex flex-col items-center space-y-1 transition-all" :class="view === 'admin' || view ===  'tambahProduk' ? 'text-indigo-600 scale-110' : 'text-gray-400'">
+      <i data-lucide="shield-check" class="w-6 h-6"></i>
+      <span class="text-[10px] font-extrabold uppercase">Admin</span>
+    </button>
+    <button @click="navigate('profil')" class="flex flex-col items-center space-y-1 transition-all" :class="view === 'profil' ? 'text-indigo-600 scale-110' : 'text-gray-400'">
+      <i data-lucide="user" class="w-6 h-6"></i>
+      <span class="text-[10px] font-extrabold uppercase">Profil</span>
+    </button>
+  </div>
+
+  <script>
+    function app() {
+      return {
+        // ========== UI STATE ==========
+        view: 'katalog',
+        loadingKatalog: false,
+        loadingGroups: false,
+        submitting: false,
+        creatingGroup: false,
+        loggingIn: false,
+        registering: false,
+        showLoginModal: false,
+        showRegisterModal: false,
+        toast: { show: false, message: '', success: true },
+        
+        // ========== DATA ==========
+        items: [],
+        groups: [],
+        detailGroup: {},
+        detailMembers: [],
+        currentUser: null,
+        
+        // ========== FORMS ==========
+        loginForm: { nomor_wa: '' },
+        registerForm: { 
+          nama_ketua: '', 
+          nomor_wa: '', 
+          pin: '', 
+          photoFile: null,     // file object dari input
+          photoPreview: '',    // preview URL
+          alamat: '', 
+          kelurahan: '', 
+          kecamatan: '' 
+        },
+        form: { nama_barang: '', kategori: 'Elektronik', harga_modal: '', harga_arisan: '', Cicilan_5bulan: '', Cicilan_10bulan: '', Link_gambar: '', persentase_bonus_arisan: 0, bonus_arisan: '' },
+        
+        // ========== WIZARD STATE ==========
+        wizardStep: 1,
+        groupData: { jumlah_anggota: 5, tgl_mulai: '', nama_grup: '' },
+        members: [],
+        selectedMemberIndex: null,
+        draftAvailable: false,
+        
+        // ========== SHUFFLE STATE ==========
+        shuffling: false,
+        showShuffleModal: false,
+        shuffleWinner: null,
+        
+        // ========== PROFILE STATE ==========
+        loadingProfile: false,
+        isEditMode: false,
+        editForm: {
+          nama_ketua: '',
+          nomor_wa: '',
+          photo: '',
+          alamat: '',
+          kelurahan: '',
+          kecamatan: ''
+        },
+        editAvailableKelurahan: [],
+        savingProfile: false,
+        
+        // ========== PRODUCT PICKER STATE ==========
+        productSearchQuery: '',
+        selectedCategoryFilter: '',
+        currentPage: 1,
+        itemsPerPage: 20,
+        
+        // ========== FITUR FILTER KATALOG ==========
+        katalogSearchQuery: '',
+        katalogCategoryFilter: '',
+        
+        // ========== CONTACT PICKER ==========
+        supportsContactPicker: ('contacts' in navigator && 'select' in navigator.contacts),
+        
+        // ========== DATA WILAYAH ==========
+        kecamatanList: ['Cipocok Jaya','Curug','Kasemen','Serang','Taktakan','Walantaka'],
+        kelurahanMap: {
+          'Cipocok Jaya': ['Banjaragung','Banjarsari','Cipocok Jaya','Dalung','Gelam','Karundang','Panancangan','Tembong'],
+          'Curug': ['Cilaku','Cipete','Curug','Curugmanis','Kamanisan','Pancalaksana','Sukajaya','Sukalaksana','Sukawana','Tinggar'],
+          'Kasemen': ['Banten','Bendung','Kasemen','Kasunyatan','Kilasah','Margaluyu','Mesjid Priyayi','Sawah Luhur','Terumbu','Warung Jaud'],
+          'Serang': ['Cimuncang','Cipare','Kagungan','Kaligandu','Kotabaru','Lontarbaru','Lopang','Serang','Sukawana','Sumurpecung','Terondol','Unyur'],
+          'Taktakan': ['Cibendung','Cilowong','Drangong','Kalang Anyar','Kuranji','Lialang','Pancur','Panggungjati','Sayar','Sepang','Taktakan','Tamanbaru','Umbul Tengah'],
+          'Walantaka': ['Cigoong','Kalodran','Kepuren','Kiara','Lebakwangi','Nyapah','Pabuaran','Pageragung','Pasuluhan','Pangampelan','Pipitan','Tegalsari','Teritih','Walantaka']
+        },
+        availableKelurahan: [],
+        
+        // ========== COMPUTED ==========
+        get canShuffle() {
+          if (!this.detailGroup || !this.detailGroup.tgl_mulai) return false;
+          if (this.detailGroup.status !== 'Aktif') return false;
+          
+          // Cek apakah masih ada anggota yang belum menang
+          const hasEligible = this.detailMembers.some(m => m.status_menang === 'Belum');
+          if (!hasEligible) return false;
+          
+          // Hitung tanggal kocok berikutnya berdasarkan bulan_berjalan
+          const tglMulai = new Date(this.detailGroup.tgl_mulai);
+          tglMulai.setHours(0,0,0,0);
+          const bulanBerjalan = Number(this.detailGroup.bulan_berjalan) || 0;
+          const nextKocokDate = new Date(tglMulai);
+          nextKocokDate.setDate(tglMulai.getDate() + (bulanBerjalan) * 30); // bulanBerjalan = jumlah kocokan yang sudah terjadi
+          const today = new Date();
+          today.setHours(0,0,0,0);
+          const isTime = today >= nextKocokDate;
+          
+          // Jika belum waktunya, false
+          if (!isTime) return false;
+          
+          // Opsional: hitung iuran bersih untuk mengecek apakah ada eligible member (sama seperti backend)
+          // Namun karena backend akan memfilter, di sini bisa dilewat saja.
+          // Tapi agar tombol tidak false positive, kita bisa hitung cepat.
+          let totalIuranPerBulan = 0;
+          let totalHargaDiminangkan = 0;
+          this.detailMembers.forEach(m => {
+            totalIuranPerBulan += Number(m.cicilan_per_bulan) || 0;
+            if (m.status_menang === 'Sudah') totalHargaDiminangkan += Number(m.harga_produk) || 0;
+          });
+          const bulanKe = bulanBerjalan + 1;
+          const iuranBersih = totalIuranPerBulan * bulanKe - totalHargaDiminangkan;
+          const hasEligibleByPrice = this.detailMembers.some(m => m.status_menang === 'Belum' && (Number(m.harga_produk) || 0) < iuranBersih);
+          
+          return hasEligibleByPrice;
+        },
+        
+        get minDate() {
+          const d = new Date();
+          d.setDate(d.getDate() + 7);
+          return d.toISOString().split('T')[0];
+        },
+
+        get nextKocokDate() {
+          if (!this.detailGroup || !this.detailGroup.tgl_mulai) return '-';
+          const tglMulai = new Date(this.detailGroup.tgl_mulai);
+          const bulanBerjalan = Number(this.detailGroup.bulan_berjalan) || 0;
+          const nextDate = new Date(tglMulai);
+          nextDate.setDate(tglMulai.getDate() + bulanBerjalan * 30);
+          return nextDate.toISOString().slice(0, 10);
+        },
+        
+        // Katalog filter computed
+        get uniqueKatalogCategories() {
+          const cats = this.items.map(item => item.kategori).filter(Boolean);
+          return [...new Set(cats)];
+        },
+        
+        get filteredKatalogItems() {
+          let filtered = this.items;
+          const query = this.katalogSearchQuery.trim().toLowerCase();
+          if (query) {
+            filtered = filtered.filter(item =>
+              item.nama_barang.toLowerCase().includes(query) ||
+              (item.kategori && item.kategori.toLowerCase().includes(query))
+            );
+          }
+          if (this.katalogCategoryFilter) {
+            filtered = filtered.filter(item => item.kategori === this.katalogCategoryFilter);
+          }
+          return filtered;
+        },
+        
+        // Product picker computed
+        get uniqueCategories() {
+          const cats = this.items.map(item => item.kategori).filter(Boolean);
+          return [...new Set(cats)];
+        },
+        
+        get filteredProducts() {
+          let filtered = this.items;
+          const query = this.productSearchQuery.trim().toLowerCase();
+          if (query) {
+            filtered = filtered.filter(item =>
+              item.nama_barang.toLowerCase().includes(query) ||
+              (item.kategori && item.kategori.toLowerCase().includes(query))
+            );
+          }
+          if (this.selectedCategoryFilter) {
+            filtered = filtered.filter(item => item.kategori === this.selectedCategoryFilter);
+          }
+          return filtered;
+        },
+        
+        get paginatedProducts() {
+          const start = (this.currentPage - 1) * this.itemsPerPage;
+          return this.filteredProducts.slice(start, start + this.itemsPerPage);
+        },
+        
+        get totalPages() {
+          return Math.ceil(this.filteredProducts.length / this.itemsPerPage);
+        },
+        
+        // ========== INIT ==========
+        init() {
+          this.loadUserFromStorage();
+          this.fetchKatalog();
+          this.updateKelurahan();
+          this.refreshIcons();
+        },
+        
+        // ========== FIX: UTAMA UNTUK REFRESH ICON ==========
+        refreshIcons() {
+          setTimeout(() => {
+            if (typeof lucide !== 'undefined' && lucide.createIcons) {
+              lucide.createIcons();
+            }
+          }, 20);
+        },
+        
+        // ========== USER STORAGE ==========
+        loadUserFromStorage() {
+          this.loadingProfile = true;
+          const stored = localStorage.getItem('arisan_current_user');
+          if (stored) {
+            try { this.currentUser = JSON.parse(stored); } catch(e) {}
+          }
+          this.loadingProfile = false;
+        },
+        saveUserToStorage(user) {
+          this.currentUser = user;
+          localStorage.setItem('arisan_current_user', JSON.stringify(user));
+        },
+        clearUserFromStorage() {
+          this.currentUser = null;
+          localStorage.removeItem('arisan_current_user');
+        },
+        logout() {
+          this.clearUserFromStorage();
+          this.showToast('Anda telah logout', true);
+          this.navigate('katalog');
+        },
+        
+        // ========== NAVIGATION ==========
+        navigate(page) {
+          this.view = page;
+          if (page === 'grup' && this.currentUser) this.fetchGroups();
+          this.refreshIcons();
+          setTimeout(() => lucide.createIcons(), 50);
+        },
+        
+        // ========== WILAYAH ==========
+        updateKelurahan() {
+          const selectedKec = this.registerForm.kecamatan;
+          this.availableKelurahan = this.kelurahanMap[selectedKec] || [];
+          this.registerForm.kelurahan = '';
+        },
+        
+        // ========== CONTACT PICKER ==========
+        async pickContactForMember(index) {
+          try {
+            const contacts = await navigator.contacts.select(['name','tel'], {multiple:false});
+            if (contacts.length) {
+              const c = contacts[0];
+              this.members[index].nama_anggota = c.name || '';
+              this.members[index].nomor_hp = (c.tel && c.tel[0]) || '';
+              this.showToast('Kontak dipilih', true);
+              this.saveDraft();
+              this.refreshIcons();
+            }
+          } catch (e) {
+            this.showToast('Tidak dapat mengakses kontak', false);
+          }
+        },
+        
+        // ========== AUTH ==========
+        openLoginModal() { this.showLoginModal = true; this.refreshIcons(); },
+        
+        checkUserAndProceed() {
+          this.loggingIn = true;
+          const wa = this.loginForm.nomor_wa;
+          google.script.run.withSuccessHandler(user => {
+            this.loggingIn = false;
+            if (user) {
+              this.saveUserToStorage(user);
+              this.showLoginModal = false;
+              this.showToast(`Selamat datang, ${user.nama_ketua}`, true);
+              this.startCreateGroupFlow();
+            } else {
+              this.showLoginModal = false;
+              this.registerForm.nomor_wa = wa;
+              this.showRegisterModal = true;
+            }
+            this.refreshIcons();
+          }).cekUser(wa);
+        },
+        
+        // ========== REGISTER DENGAN UPLOAD FOTO ==========
+        async submitRegister() {
+          if (this.registering) return;
+          
+          // Konversi file foto ke base64 jika ada
+          let photoBase64 = '';
+          if (this.registerForm.photoFile) {
+            const reader = new FileReader();
+            photoBase64 = await new Promise((resolve) => {
+              reader.onload = (e) => resolve(e.target.result);
+              reader.readAsDataURL(this.registerForm.photoFile);
+            });
+          }
+          
+          const payload = {
+            nama_ketua: this.registerForm.nama_ketua,
+            nomor_wa: this.registerForm.nomor_wa,
+            pin: this.registerForm.pin,
+            alamat: this.registerForm.alamat,
+            kelurahan: this.registerForm.kelurahan,
+            kecamatan: this.registerForm.kecamatan,
+            photo_base64: photoBase64
+          };
+          
+          this.registering = true;
+          google.script.run
+            .withSuccessHandler(res => {
+              this.registering = false;
+              if (res.success) {
+                const newUser = { 
+                  ...payload, 
+                  user_id: res.user_id, 
+                  photo: res.photo_url || '' 
+                };
+                // hapus photo_base64 agar tidak disimpan di localStorage
+                delete newUser.photo_base64;
+                this.saveUserToStorage(newUser);
+                this.showRegisterModal = false;
+                // reset form
+                this.registerForm = { 
+                  nama_ketua: '', nomor_wa: '', pin: '', 
+                  photoFile: null, photoPreview: '', 
+                  alamat: '', kelurahan: '', kecamatan: '' 
+                };
+                this.showToast(res.message, true);
+                this.startCreateGroupFlow();
+              } else {
+                this.showToast(res.message, false);
+              }
+              this.refreshIcons();
+            })
+            .withFailureHandler(err => {
+              this.registering = false;
+              this.showToast('Gagal registrasi: ' + err.message, false);
+            })
+            .daftarUser(payload);
+        },
+        
+        // ========== KATALOG ==========
+        fetchKatalog() {
+          this.loadingKatalog = true;
+          google.script.run.withSuccessHandler(res => {
+            this.items = res;
+            this.loadingKatalog = false;
+            this.refreshIcons();
+            setTimeout(() => lucide.createIcons(), 50);
+          }).getKatalog();
+        },
+        
+        // ========== DRAFT MANAGEMENT ==========
+        checkDraft() {
+          const draft = sessionStorage.getItem('arisan_draft_group');
+          this.draftAvailable = !!draft;
+          this.refreshIcons();
+        },
+        saveDraft() {
+          if (this.view !== 'createGroup') return;
+          const draft = { wizardStep: this.wizardStep, groupData: this.groupData, members: this.members };
+          sessionStorage.setItem('arisan_draft_group', JSON.stringify(draft));
+        },
+        loadDraft() {
+          const draft = sessionStorage.getItem('arisan_draft_group');
+          if (draft) {
+            try {
+              const data = JSON.parse(draft);
+              this.wizardStep = data.wizardStep;
+              this.groupData = data.groupData;
+              this.members = data.members;
+              this.draftAvailable = false;
+              this.showToast('Draft dimuat', true);
+              this.refreshIcons();
+            } catch(e) {}
+          }
+        },
+        discardDraft() {
+          sessionStorage.removeItem('arisan_draft_group');
+          this.draftAvailable = false;
+          this.showToast('Draft dibuang', true);
+          this.refreshIcons();
+        },
+        
+        // ========== CREATE GROUP FLOW ==========
+        startCreateGroupFlow() {
+          if (!this.currentUser) {
+            this.openLoginModal();
+            return;
+          }
+          this.wizardStep = 1;
+          this.groupData = { jumlah_anggota: 5, tgl_mulai: '', nama_grup: '' };
+          this.members = [];
+          this.checkDraft();
+          this.view = 'createGroup';
+          this.refreshIcons();
+          setTimeout(() => lucide.createIcons(), 50);
+        },
+        cancelCreateGroup() {
+          if (this.wizardStep > 1 || this.members.some(m => m.nama_anggota || m.produk)) {
+            this.saveDraft();
+            this.showToast('Draft disimpan, Anda dapat melanjutkan nanti', true);
+          }
+          this.view = 'katalog';
+          this.refreshIcons();
+        },
+        nextStep() {
+          if (!this.groupData.tgl_mulai) return this.showToast('Pilih tanggal mulai', false);
+          const jml = this.groupData.jumlah_anggota;
+          this.members = Array.from({ length: jml }, () => ({ nama_anggota: '', nomor_hp: '', produk: null }));
+          this.wizardStep = 2;
+          this.saveDraft();
+          this.refreshIcons();
+        },
+        openProductPicker(index) {
+          this.selectedMemberIndex = index;
+          this.productSearchQuery = '';
+          this.selectedCategoryFilter = '';
+          this.currentPage = 1;
+          this.view = 'productPicker';
+          this.refreshIcons();
+        },
+        selectProductForMember(item) {
+          const jml = this.groupData.jumlah_anggota;
+          const cicilan = jml === 5 ? item.Cicilan_5bulan : item.Cicilan_10bulan;
+          const produkData = {
+            produk_id: item.item_id,
+            nama_produk: item.nama_barang,
+            harga_produk: item.harga_arisan,
+            cicilan_per_bulan: cicilan,
+            ...item
+          };
+          this.members[this.selectedMemberIndex].produk = produkData;
+          this.showToast('Produk dipilih', true);
+          this.saveDraft();
+          this.view = 'createGroup';
+          this.refreshIcons();
+        },
+        validateAndNext() {
+          const valid = this.members.every(m => m.nama_anggota && m.nomor_hp && m.produk);
+          if (!valid) return this.showToast('Lengkapi semua data anggota & pilih produk', false);
+          this.wizardStep = 3;
+          this.saveDraft();
+          this.refreshIcons();
+        },
+        submitCreateGroup() {
+          this.creatingGroup = true;
+          const payload = {
+            user_id: this.currentUser.user_id,
+            nama_grup: this.groupData.nama_grup,
+            jumlah_anggota: this.groupData.jumlah_anggota,
+            tgl_mulai: this.groupData.tgl_mulai,
+          };
+          google.script.run.withSuccessHandler(res => {
+            if (!res.success) {
+              this.creatingGroup = false;
+              return this.showToast(res.message, false);
+            }
+            const groupId = res.group_id;
+            const membersPayload = this.members.map(m => ({
+              nama_anggota: m.nama_anggota,
+              nomor_hp: m.nomor_hp,
+              produk_id: m.produk.produk_id,
+              nama_produk: m.produk.nama_produk,
+              harga_produk: m.produk.harga_produk,
+              cicilan_per_bulan: m.produk.cicilan_per_bulan
+            }));
+            google.script.run.withSuccessHandler(res2 => {
+              this.creatingGroup = false;
+              if (res2.success) {
+                sessionStorage.removeItem('arisan_draft_group');
+                this.showToast('Grup berhasil dibuat!', true);
+                this.view = 'grup';
+                this.fetchGroups();
+              } else {
+                this.showToast(res2.message, false);
+              }
+              this.refreshIcons();
+            }).saveMembers({ group_id: groupId, user_id: this.currentUser.user_id, members: membersPayload });
+          }).createGroup(payload);
+        },
+        
+        // ========== GROUPS ==========
+        fetchGroups() {
+          if (!this.currentUser) return;
+          this.loadingGroups = true;
+          google.script.run
+            .withSuccessHandler(g => {
+              const groupsArray = Array.isArray(g) ? g : [];
+              this.groups = groupsArray;
+              this.loadingGroups = false;
+              this.$nextTick(() => lucide.createIcons());
+              this.refreshIcons();
+              if (this.groups.length === 0 && groupsArray.length > 0) {
+                setTimeout(() => { this.groups = [...groupsArray]; }, 100);
+              }
+            })
+            .withFailureHandler(err => {
+              console.error(err);
+              this.groups = [];
+              this.loadingGroups = false;
+              this.showToast('Gagal memuat daftar grup', false);
+            })
+            .getGroupsByUser(this.currentUser.user_id);
+        },
+        
+        goToDetailGroup(groupId) {
+          this.loading = true;
+          this.detailGroup = {};
+          this.detailMembers = [];
+          google.script.run
+            .withSuccessHandler(res => {
+              this.loading = false;
+              if (res && res.success) {
+                this.detailGroup = res.group;
+                this.detailMembers = res.members || [];
+                this.navigate('detailGrup');
+                setTimeout(() => lucide.createIcons(), 100);
+                this.refreshIcons();
+              } else {
+                this.showToast(res?.message || 'Data grup tidak ditemukan', false);
+              }
+            })
+            .withFailureHandler(err => {
+              this.loading = false;
+              console.error(err);
+              this.showToast('Gagal terhubung ke server', false);
+            })
+            .getGroupDetail(groupId);
+        },
+        
+        // ========== SHUFFLE ==========
+        startShuffle() {
+          if (!this.canShuffle || this.shuffling) return;
+          this.shuffling = true;
+          this.showShuffleModal = true;
+          this.shuffleWinner = null;
+          this.refreshIcons();
+          setTimeout(() => {
+            google.script.run
+              .withSuccessHandler(res => {
+                this.shuffling = false;
+                if (res.success) {
+                  this.shuffleWinner = res.winner;
+                  this.detailGroup.bulan_berjalan = res.bulan_ke;
+                  this.detailGroup.status = res.group_status;
+                  const member = this.detailMembers.find(m => m.member_id === res.winner.member_id);
+                  if (member) {
+                    member.status_menang = 'Sudah';
+                    member.urutan_menang = res.winner.urutan_menang;
+                    member.menang_di_bulan = res.winner.menang_di_bulan;
+                  }
+                  this.refreshIcons();
+                  setTimeout(() => lucide.createIcons(), 50);
+                } else {
+                  this.showShuffleModal = false;
+                  this.showToast(res.message, false);
+                }
+              })
+              .withFailureHandler(err => {
+                this.shuffling = false;
+                this.showShuffleModal = false;
+                this.showToast('Gagal melakukan pengocokan', false);
+              })
+              .shuffleGroup(this.detailGroup.group_id);
+          }, 2000);
+        },
+        closeShuffleModal() {
+          this.showShuffleModal = false;
+          this.shuffleWinner = null;
+          if (this.detailGroup.status === 'Selesai') this.fetchGroups();
+          this.refreshIcons();
+        },
+        
+        // ========== ADMIN PRODUK ==========
+        submitForm() {
+          this.submitting = true;
+          google.script.run.withSuccessHandler(res => {
+            this.submitting = false;
+            if(res.success) {
+              this.showToast(res.message, true);
+              this.resetForm();
+              this.fetchKatalog();
+              this.navigate('admin');
+            } else {
+              this.showToast(res.message, false);
+            }
+            this.refreshIcons();
+          }).tambahProduk(this.form);
+        },
+        resetForm() {
+          this.form = { nama_barang: '', kategori: 'Elektronik', harga_modal: '', harga_arisan: '', Cicilan_5bulan: '', Cicilan_10bulan: '', Link_gambar: '', persentase_bonus_arisan: 0, bonus_arisan: '' };
+        },
+        
+        // ========== PROFILE EDIT ==========
+        startEditProfile() {
+          this.editForm = {
+            nama_ketua: this.currentUser.nama_ketua || '',
+            nomor_wa: this.currentUser.nomor_wa || '',
+            photo: this.currentUser.photo || '',
+            alamat: this.currentUser.alamat || '',
+            kelurahan: this.currentUser.kelurahan || '',
+            kecamatan: this.currentUser.kecamatan || ''
+          };
+          this.updateEditKelurahan();
+          this.isEditMode = true;
+          this.refreshIcons();
+          setTimeout(() => lucide.createIcons(), 20);
+        },
+        
+        updateEditKelurahan() {
+          const kec = this.editForm.kecamatan;
+          this.editAvailableKelurahan = this.kelurahanMap[kec] || [];
+          if (!this.editAvailableKelurahan.includes(this.editForm.kelurahan)) {
+            this.editForm.kelurahan = '';
+          }
+        },
+        
+        cancelEdit() {
+          this.isEditMode = false;
+          this.editForm = {};
+          this.refreshIcons();
+        },
+        
+        saveProfile() {
+          if (this.editForm.nomor_wa && this.editForm.nomor_wa.length < 10) {
+            this.showToast('Nomor WA minimal 10 digit', false);
+            return;
+          }
+          this.savingProfile = true;
+          const payload = {
+            user_id: this.currentUser.user_id,
+            ...this.editForm
+          };
+          google.script.run
+            .withSuccessHandler(res => {
+              this.savingProfile = false;
+              if (res.success) {
+                Object.assign(this.currentUser, this.editForm);
+                this.saveUserToStorage(this.currentUser);
+                this.isEditMode = false;
+                this.showToast(res.message, true);
+                this.refreshIcons();
+                setTimeout(() => lucide.createIcons(), 50);
+              } else {
+                this.showToast(res.message, false);
+              }
+            })
+            .withFailureHandler(err => {
+              this.savingProfile = false;
+              this.showToast('Gagal menyimpan profil', false);
+              console.error(err);
+            })
+            .updateUser(payload);
+        },
+        
+        // ========== UTILS ==========
+        showToast(msg, success) {
+          this.toast = { show: true, message: msg, success };
+          lucide.createIcons();
+          this.refreshIcons();
+          setTimeout(() => this.toast.show = false, 3000);
+        },
+        formatIDR(val) {
+          return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
+        }
+      }
+    }
+  </script>
+</body>
+</html>
